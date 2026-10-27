@@ -55,46 +55,65 @@ make install
 Whichever route, run `leadkit` commands from the installed binary rather than a throwaway build:
 `leadkit init` bakes its own absolute path into the hooks and daemons it writes.
 
-## Getting started
+## Quickstart
 
-`docs/ADOPTING-LEADKIT.md` is the source of truth for adoption, and `leadkit onboard`
-prints it. The short version:
+Two things must be true first, and both fail silently rather than loudly:
+
+- **`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set before Claude Code starts.** Without
+  it the coordination primitives do nothing at all, and nothing says so.
+- **Run `leadkit` from the installed binary, not a throwaway build.** `init` bakes its own
+  absolute path into the hooks and daemons it writes, so a build in a temp directory produces
+  hooks pointing at a binary that will not be there.
+
+Then:
 
 ```
-leadkit doctor      # preflight: config, hooks, daemons and queue health
-leadkit init        # dry run by default; --apply --confirm to write anything
-leadkit status      # what the team is doing, from disk
+leadkit init --apply --confirm   # writes the hooks, the daemons, and the leadkit-adopt skill
 ```
 
-`leadkit init --apply --confirm` writes the hooks and daemons and also installs the
-`leadkit-adopt` skill into `~/.claude/skills/`. After it, restart the Claude Code session and
-run `/leadkit-adopt` to be walked through adoption.
+Restart the Claude Code session so the new skill is loaded, and run:
 
-`leadkit.yaml.example` at the repo root is the example profile to copy. It is inert as named,
-because leadkit only loads the exact basename `leadkit.yaml`. It shows the keys that matter,
-including the `authority.<repo>` block, which is the part adopters most often get wrong.
-`docs/adopter-profiles/per-project-template.leadkit.yaml` is a smaller starting point, and
-`docs/CONFIG-REFERENCE.md` (generated from the schema) documents every field.
+```
+/leadkit-adopt
+```
 
-The profile can live in the repo or outside it:
+That is the adoption path. The skill is a wizard, not a document: it probes what is already on
+disk, branches on what it finds, walks you through the four pieces of a `leadkit.yaml`, stops
+hard at the authority grant because that decides what an agent may do in a repo, scaffolds a
+first task, and stands up the persistent owners and the per-project daemons. The last two are
+the ones people skip, and skipping them leaves a queue nobody consumes.
 
-- **In-repo:** copy the example to `leadkit.yaml` at the project root and commit it. Found
-  first.
-- **External:** place it at `~/.claude/leadkit/config/<slug>.yaml`, keyed on the repo's origin
-  name, so one file governs every clone and worktree. Used when there is no in-repo file.
-  Relative paths in an external config anchor to the config file's own directory, not the
-  repo, so write `queue_root` and `store_root` as absolute paths there.
+It will have you run `leadkit init` again with the config in place. That is deliberate, not a
+loop — the first run exists to install the skill, and `init` is idempotent, so the second says
+`nothing to apply` for anything already correct.
 
-Not sure which file to edit? `leadkit config path` prints the exact external and in-repo paths for the
-current repo (marked `[exists]` / `[not created]`) and which one is ACTIVE.
+Three commands worth knowing from the start:
 
-`leadkit config init` writes a starter in-repo and `leadkit config init --external` writes one
-outside. This repository itself uses the external mode and ships no committed profile, because
-its authority config names its owner and carries a merge grant, which should not be in git.
+```
+leadkit doctor        # preflight, and the honest answer to "are my guards actually on"
+leadkit status        # what the team is doing, read from disk
+leadkit config path   # which profile governs this repo, and whether it exists yet
+```
 
-Two things that will make it look broken if missed: the binary must be the installed one,
-and Agent Teams must be enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), without which
-the coordination primitives silently do nothing.
+`leadkit doctor` is the one to re-run after adoption. It probes each guard rather than checking
+that it appears in a settings file, which is the difference between a control and a belief.
+
+### Configuration, when you want the detail
+
+`docs/ADOPTING-LEADKIT.md` is the source of truth for adoption and `leadkit onboard` prints it;
+`docs/CONFIG-REFERENCE.md` is generated from the schema and documents every field. The wizard
+walks the rest interactively, so this is reference rather than required reading.
+
+A profile can live in the repo (`leadkit.yaml` at the root, found first) or outside it
+(`~/.claude/leadkit/config/<slug>.yaml`, keyed on the origin's name, so one file governs every
+clone and worktree). Relative paths in an external profile anchor to the config file's own
+directory rather than the repo, so write `queue_root` and `store_root` as absolute paths there.
+`leadkit config init` writes a starter in-repo, `--external` writes one outside, and
+`leadkit.yaml.example` at the repo root is a fuller example — inert as named, because only the
+exact basename `leadkit.yaml` is loaded.
+
+This repository uses the external mode and ships no committed profile, because its authority
+config names its owner and carries a merge grant, which should not be in git.
 
 ## The guards
 
