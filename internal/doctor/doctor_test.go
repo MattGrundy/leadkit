@@ -1220,7 +1220,7 @@ func TestAuthorityKeyCollisionCheck_MultipleMatchesWarn(t *testing.T) {
 	prof := cleanProfile(t)
 	prof.Authority = map[string]config.AuthoritySpec{
 		"acmecorp/shared-infra": {PushWhitelist: []string{"feat/*"}},
-		"acmecorp":             {PushWhitelist: []string{"chore/*"}},
+		"acmecorp":              {PushWhitelist: []string{"chore/*"}},
 	}
 	git := fakeGit{ok: true, remote: "git@github.com:acmecorp/shared-infra.git"}
 	c := authorityKeyCollisionCheck(prof, git)

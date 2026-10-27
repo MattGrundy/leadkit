@@ -10,6 +10,27 @@ import pytest
 
 from leadkit_eval import corpus as cm
 
+
+# The root commit of the repository the corpus pins refer to. A clone whose root differs is a
+# DIFFERENT repository, not a drifted one, and the pins can never resolve in it: `leadkit publish`
+# builds the public repository as fresh commits with no shared ancestry. Identity is the right
+# signal here and commit COUNT is not — a published repository has one commit only until its first
+# merge, and a pull request build checks out a merge ref, so a count test passes on the first
+# release and then silently stops skipping.
+PINNED_AGAINST_ROOT = "40d38c4e2042e519ab9f7efb256e1f1875affc33"
+
+
+def _root_commit(repo) -> str:
+    """The repo's first commit, or "" when it cannot be read. An unknown returns "" and therefore
+    never matches, so an unreadable root makes the corpus check run rather than skip."""
+    out = subprocess.run(
+        ["git", "-C", str(repo), "rev-list", "--max-parents=0", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    return out.stdout.split("\n")[0].strip() if out.returncode == 0 else ""
+
+
 # The pre-registered verdict table, from evals/comments/CRITERIA.md.
 EXPECTED = {
     "main-version-block/stale-bump-by-hand": ("flag", False),
@@ -37,6 +58,17 @@ def test_committed_corpus_text_matches_the_pinned_commits(corpus):
 
     checked, skipped, mismatches = cm.check_pinned(corpus, cm.git_show(REPO))
     assert not mismatches, "\n".join(mismatches)
+    # check_pinned deliberately surfaces skips rather than hiding them, because a check that
+    # skips everything has verified nothing. That stands for the repository the pins belong to:
+    # there, an unresolvable pin is drift and must fail. It cannot hold in a repository with
+    # different ancestry, where no pin could ever resolve. So skip on IDENTITY, and keep failing
+    # on a missing pin wherever the ancestry matches.
+    root = _root_commit(REPO)
+    if skipped and root and root != PINNED_AGAINST_ROOT:
+        pytest.skip(
+            f"this clone's root commit is {root[:12]}, not the {PINNED_AGAINST_ROOT[:12]} the "
+            f"corpus pins were taken from, so the history they name does not exist here: {skipped}"
+        )
     assert skipped == [], f"pinned commits missing from this clone, so their text was not verified: {skipped}"
     assert checked == len(corpus.cases)
 
