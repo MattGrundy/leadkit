@@ -1,0 +1,119 @@
+name: Release
+
+# Tags, not merges. A tag is what gives an artefact an identity: binaries built on every
+# merge would all report the same version while containing different code, which is
+# actively misleading for a tool whose own doctor checks for binary skew.
+on:
+  push:
+    # Semver-shaped tags only. A bare "v*" also fires on a scratch tag like `vtest`, which would
+    # build and publish a release named after it.
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+# Read-only by default. Only the release job below needs to write, and it asks for that itself,
+# so a compromised build-step action cannot create or modify releases.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # darwin builds run ON macOS deliberately. Apple Silicon refuses to execute a
+          # binary with no code signature, and Go's linker applies the required ad-hoc
+          # signature itself (flags adhoc,linker-signed). Building here means that is
+          # guaranteed rather than assumed about cross-compilation — the failure mode if
+          # it is wrong is a bare "killed: 9" with nothing explaining it.
+          - { goos: darwin, goarch: arm64, runner: macos-latest }
+          - { goos: darwin, goarch: amd64, runner: macos-latest }
+          # Pure-Go linux builds cross-compile correctly from any host, so one runner does both.
+          - { goos: linux, goarch: arm64, runner: ubuntu-latest }
+          - { goos: linux, goarch: amd64, runner: ubuntu-latest }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          dist="leadkit_${tag}_${GOOS}_${GOARCH}"
+          mkdir -p "dist/${dist}"
+          # Version is a package-level var precisely so this works. -s -w: smaller download,
+          # and nothing here needs a debugger attached.
+          go build -trimpath \
+            -ldflags "-s -w -X 'main.Version=leadkit ${tag}'" \
+            -o "dist/${dist}/leadkit" ./cmd/leadkit
+          # Ship the licence and README alongside the binary when the tree has them. An
+          # unconditional cp under `set -e` would fail every matrix job and so publish no
+          # release at all.
+          for f in LICENSE README.md; do
+            if [ -f "$f" ]; then cp "$f" "dist/${dist}/"; else echo "note: $f not present; archive ships without it"; fi
+          done
+          # Assert the artefact reports the tag it was built from: cheaper to catch here than
+          # in an adopter's doctor output.
+          if [ "${GOOS}" = "$(go env GOHOSTOS)" ] && [ "${GOARCH}" = "$(go env GOHOSTARCH)" ]; then
+            got="$("dist/${dist}/leadkit" version)"
+            [ "${got}" = "leadkit ${tag}" ] || { echo "version mismatch: ${got} != leadkit ${tag}"; exit 1; }
+            echo "verified self-report: ${got}"
+          else
+            echo "cross-built; self-report asserted on the native matrix entries"
+          fi
+          tar -C dist -czf "dist/${dist}.tar.gz" "${dist}"
+          shasum -a 256 "dist/${dist}.tar.gz" | sed "s|dist/||" > "dist/${dist}.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: leadkit_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: staging
+          merge-multiple: true
+
+      - name: Collect checksums
+        run: |
+          set -euo pipefail
+          cd staging
+          # One SHA256SUMS covering every archive, so a downloader can verify with a single file.
+          cat ./*.sha256 | sort -k2 > SHA256SUMS
+          rm -f ./*.sha256
+          echo "--- SHA256SUMS ---"; cat SHA256SUMS
+          # Four archives are expected; fewer means a matrix entry failed silently.
+          n=$(grep -c . SHA256SUMS)
+          [ "$n" -eq 4 ] || { echo "expected 4 archives, found $n"; exit 1; }
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag \
+            staging/*

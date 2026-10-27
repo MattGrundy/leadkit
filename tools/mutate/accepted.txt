@@ -1,0 +1,4 @@
+# Mutants accepted with a reason: a survivor no test can or should pin, or a mutant that cannot compile.
+# "<key> -- <reason>"; the key is printed by a failing run. An entry that matches nothing fails the run.
+
+internal/hook/push_guard.go: checkOnePush: remove-call: "logViolation(cfg.ViolationsLogPath, violationRecord{\n\t\t\tTS:        time.Now().UTC().Format(time.RFC3339),\n\t\t\tSessionID: in.SessionID,\n\t\t\tRepo:      repoPath,\n\t\t\tTarget:    target,\n\t\t\tCommand:   truncate(in.ToolInput.Command, maxLoggedCommandLen),\n\t\t\tForce:     force,\n\t\t\tReason:    reason,\n\t\t})" => "_ = 0" #0 -- INVALID by construction: removing this call drops the only uses of the "time" import and of the local "force" (both appear only in its arguments), so no buildable mutant exists here

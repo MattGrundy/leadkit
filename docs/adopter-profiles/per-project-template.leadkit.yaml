@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-project leadkit.yaml — place at the ROOT of the project's own repo/clone.
+# Scopes this project's session to ITS OWN repo: honest identity + review-gate its
+# own pushes. Copy this, set <slug>, and add it at your project root.
+#
+# Fill <slug> with your project's identity — conventionally the repo name, e.g.
+# payments-api / web-client / platform-infra. It is BOTH the session's inbox identity
+# AND the origin-URL substring the gate scopes to.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# IDENTITY — this session's honest slug + inbox. Takes precedence over the
+# queue_root basename, so your session is addressable as <slug> (not a fallback).
+project_id: <slug>
+
+# QUEUE — this project's own queue, cwd-relative (never another project's).
+queue_root: ./queue
+
+# GATE SCOPE — require the review gate before pushing THIS project's own repo.
+# The project's own origin is ALWAYS gated (auto-derived from this repo's git remote),
+# whatever enforced_remotes holds. Pick one:
+#   (a) leave enforced_remotes EMPTY. Recommended if your git origin is set.
+#   (b) name your own repo explicitly (redundant with the git remote, but harmless), and
+#       add OTHER repos' origin-URL substrings if one session governs several:
+enforced_remotes:
+  - <slug>          # origin-URL substring for THIS repo (delete this block for option (a))
+
+# PUSH BRANCHES — which branches a raw push may reach; protected branches (master/
+# main/develop/release/*) still require the PR flow.
+push_whitelist: [feat/*, fix/*, chore/*, mg/*, user/*]
+
+# ROSTER — declare this project's work-roles (add/trim to match your team).
+roster:
+  - type: <role>
+    count: 1
+
+# AUTHORITY — PR-create/merge grants come from the repo owner directly (never drafted here).
+# The owner adds an authority.<repo> block separately if this session may open/merge PRs.
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTE: "this project only pushes its own repo" is enforced softly here (gate + own
+# queue). HARD prevention of pushing OTHER repos is the sandboxing/least-privilege
+# layer (a push-guard own-repo rule or scoped mounts) — a separate follow-up.

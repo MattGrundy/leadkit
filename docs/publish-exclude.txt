@@ -1,0 +1,24 @@
+// Paths removed from the tree before it is published (leadkit publish).
+//
+// One exact repository-relative path per line; a directory is removed with everything under it.
+// No globs: a pattern that matched nothing would exclude nothing and say so to no one. `//`
+// starts a comment, as in the scrub term file.
+//
+// This file is the exclusion list. It is not in a script body, so adding a document and forgetting
+// to exclude it shows up as a diff to review rather than an invisible omission. A line here that
+// no longer matches a path is reported as STALE and fails the run: renaming a file must update it.
+//
+// Not listed, because they are not tracked: tasks/, queue/ and .leadkit/ (gitignored).
+docs/build-tasks
+docs/BACKLOG.md
+docs/DEV-TRACKING.md
+docs/ADOPTION-BRIEF.md
+docs/OPERATING-MODEL.md
+docs/PORTABLE-OPERATING-KIT.md
+docs/HIERARCHY-AND-SYNC.md
+docs/design/cross-project-coordination.md
+docs/design/ai-workload-offload.md
+docs/design/account-routing-brief-central-pool.md
+docs/PUBLISHING.md
+docs/SELF-GATING.md
+ONBOARDING.md

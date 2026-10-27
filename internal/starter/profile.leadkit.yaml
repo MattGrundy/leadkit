@@ -1,0 +1,56 @@
+# leadkit.yaml — this project's profile. Place it at the project's own repo root.
+#
+# A reference for the fields a profile can carry; `leadkit config init` writes a minimal one
+# to start from. Every field below is OPTIONAL: anything omitted falls back to the built-in
+# defaults, so a short file is a valid file. Run `leadkit config show` to see the
+# fully-resolved profile, and `leadkit doctor` to have it checked.
+#
+# ALL PATHS ARE RELATIVE to the directory this file lives in, which is what makes the
+# profile portable across machines and clones.
+
+# IDENTITY. This project's slug: its inbox name for cross-project briefs, and the `from`
+# its own briefs carry. Conventionally the repo name. Leave it unset and leadkit derives
+# it from the git repo's own directory — honest, but set it explicitly if you want a name
+# that differs from the directory.
+project_id: <your-project>
+
+# THE QUEUE. Work lives on disk, not in a conversation: <queue_root>/<role>/<state>/
+# symlinks into the flat task store. `leadkit team scaffold` creates the structure.
+queue_root: ./queue
+store_root: ./tasks
+
+# GATE SCOPE: this project's own origin, derived from the git remote, is ALWAYS gated —
+# nothing in this list can switch that off, and it names nothing. List OTHER repos here,
+# matched as substrings of their origin URL, only if one session governs several.
+enforced_remotes: []
+
+# PUSH BRANCHES: which branches a raw `git push` may reach. Default-deny — anything not
+# matched is refused. Protected branches (main/master/develop/release/*) are deliberately
+# NOT matchable by pattern here; reaching one needs an explicit per-repo authority entry.
+push_whitelist: [feat/*, fix/*, chore/*]
+
+# WHICH ROLES ARE LIVE, and how many of each. The gate needs code-review and critique to
+# be DIFFERENT roles: one agent cannot record both layers, which is the point.
+roster:
+  - type: code-review
+    count: 1
+  - type: critique
+    count: 1
+
+# PER-REPO AUTHORITY: what an agent may do unsupervised in a given repo. Keyed by a
+# substring of the origin URL. Absent means refused, so this is opt-in.
+#
+# can_open_pr and can_merge each take true, false, or the literal "human" (always needs a
+# person, regardless of gate state — distinct from false, which means "not wired yet").
+#
+# required_gates EMPTY does not mean ungated: it inherits the review gate's default
+# layers. There is no way to express an ungated path, by design.
+#
+# authority:
+#   <your-repo>:
+#     can_push: true
+#     can_open_pr: true
+#     pr_draft_only: false
+#     can_merge: human      # merges stay with a person
+#     merge_grant: ""       # an incident or ticket ref granting a standing exception
+#     required_gates: []    # inherits [code-review, critique]

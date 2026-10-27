@@ -1,0 +1,56 @@
+# golangci-lint configuration for leadkit.
+# Curated, high-signal baseline — intended to be GREEN on the current tree.
+#
+# Deferred (intentionally NOT enabled yet): the noisy/opinionated linters
+# (gocyclo, funlen, gochecknoglobals, lll, nestif, gocognit, ...). They would
+# flood the current large files (notably cmd/leadkit/main.go). Enable them as
+# part of the separate file-breakdown refactor, not here.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - govet        # suspicious constructs the compiler misses
+    - errcheck     # unchecked errors
+    - ineffassign  # ineffectual assignments
+    - staticcheck  # broad correctness/style analyzer (incl. former gosimple/stylecheck)
+    - unused       # unused code
+    - misspell     # common English misspellings in comments/strings
+    - unconvert    # needless type conversions
+    - bodyclose    # HTTP response bodies that are never closed
+  exclusions:
+    # Skip generated files (e.g. anything carrying a "DO NOT EDIT" header).
+    generated: lax
+    # Keep golangci-lint's own curated default exclusions for common false
+    # positives (well-known safe patterns).
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+    rules:
+      # Test files legitimately ignore errors on cleanup/close and craft HTTP
+      # bodies inline; relax the two error-return linters there only.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - bodyclose
+      # Opinionated staticcheck sub-checks, deferred (same spirit as the
+      # deferred opinionated linters above) — these are stylistic/quickfix, not
+      # correctness, and firing them here would demand judgment-call rewrites:
+      #   ST1005 — "error strings should not end with punctuation": leadkit's
+      #            refusal errors are deliberately multi-sentence, user-facing
+      #            messages that read as prose (e.g. "... Rework, re-gate.").
+      #   QF1001 — "could apply De Morgan's law": the !(a && b) filter guards are
+      #            clearer left as written.
+      #   QF1002 — "could use tagged switch": a stylistic quickfix suggestion.
+      - linters:
+          - staticcheck
+        text: "^(ST1005|QF1001|QF1002):"
+
+formatters:
+  enable:
+    - gofmt      # canonical gofmt formatting
+    - goimports  # import grouping/ordering

@@ -1,0 +1,13 @@
+# Every action in .github/workflows is pinned to a commit SHA with a trailing `# <tag>`
+# comment (internal/repoguard enforces it), so a pin never moves on its own. This is what
+# moves it: Dependabot reads that format, opens a PR that bumps the SHA and rewrites the
+# tag comment, and CI re-runs against the new pin before it is merged.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

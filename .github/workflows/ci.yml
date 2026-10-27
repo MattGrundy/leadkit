@@ -1,0 +1,180 @@
+name: CI
+
+# Basic CI for the leadkit toolkit: build, vet, gofmt, test, lint, and two
+# drift backstops (go.mod tidy + the generated CONFIG-REFERENCE). Single fast
+# job — this is the quality floor, not a matrix.
+#
+# Plus a secret scan in its own job, over full history rather than the diff: this
+# repo is the private home of a toolkit meant to be forwarded to a public one, so a
+# secret that ever landed would travel with the export. It runs in parallel and
+# gates nothing else, because a build failure and a leaked credential want
+# different reactions.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref (a new push obsoletes the old run).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-lint:
+    name: build · vet · gofmt · test · lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: gofmt (fail on any unformatted file)
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not gofmt-formatted:"
+            echo "$unformatted"
+            echo "Run: gofmt -w ."
+            exit 1
+          fi
+
+      - name: go test
+        run: go test ./... -count=1
+
+      # Nothing above sets GOCOVERDIR, so this step is the only one that exercises the
+      # instrumented build `make cover` takes when it is set.
+      - name: coverage target still works (make cover)
+        run: make cover
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.11.3
+
+      - name: go mod tidy is clean
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: CONFIG-REFERENCE is regenerated
+        run: |
+          go generate ./internal/config
+          git diff --exit-code docs/CONFIG-REFERENCE.md
+
+  evals:
+    name: evals (harness tests, no network)
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the corpus's pin check reads the commits its cases are pinned to, and fails
+      # if any is absent.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # The gold-label tripwire, the baselines, the pin check and the scorer-hole regressions live
+      # in these tests, and nothing else runs them.
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: evals/requirements.lock
+
+      - name: Install the pinned harness
+        run: |
+          pip install -r evals/requirements.lock
+          pip install -e 'evals[dev]'
+
+      - name: pytest evals
+        run: python -m pytest evals
+
+  installer:
+    name: install.sh (shellcheck · behaviour tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # shellcheck ships on GitHub's ubuntu runners. -s sh holds install.sh to POSIX sh, which
+      # is what it runs under (dash on Debian/Ubuntu, bash-as-sh on macOS).
+      - name: shellcheck
+        run: shellcheck -s sh install.sh scripts/test-install.sh
+
+      # Under dash as well, because CI's /bin/sh and a macOS user's /bin/sh differ and the
+      # installer has to be right under both.
+      - name: installer behaviour tests (dash)
+        run: SH_UNDER_TEST=dash sh scripts/test-install.sh
+
+      - name: installer behaviour tests (bash)
+        run: SH_UNDER_TEST=bash sh scripts/test-install.sh
+
+  secret-scan:
+    name: gitleaks (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Depth 0 scans all history. Note what that is and is not worth:
+          #
+          # With the version pinned below, re-scanning identical commits every run
+          # finds nothing new. The reason to keep it is that a diff-scoped scan needs
+          # a correct merge-base, and getting that wrong silently narrows coverage
+          # rather than failing — which is how the previous version of this job came
+          # to pass while scanning nothing. "Scan everything" has no such failure
+          # mode, and here it costs ~1s over 4.8MB.
+          #
+          # It earns its place properly when the pin is bumped: that is when a newer
+          # ruleset gets applied retroactively to old commits. If history ever grows
+          # enough for this to stop being trivial, the right shape is a diff scan on
+          # pull requests plus a scheduled full scan.
+          fetch-depth: 0
+
+      # The pinned binary rather than gitleaks/gitleaks-action, for two reasons.
+      #
+      # 1. On a pull_request event the action does NOT scan the clone. It calls the
+      #    API to list the PR's commits and scans those, so fetch-depth above would
+      #    be ignored and the job would not actually cover history. It also needs
+      #    `pull-requests: read` for that call, which it fails without (403
+      #    "Resource not accessible by integration").
+      # 2. `gitleaks git` over the checkout needs no API access and no permissions
+      #    beyond reading the repo, and it is the same command runnable locally.
+      #
+      # Version and checksum are pinned: this job exists to catch leaked
+      # credentials, so it should not fetch an unverified binary to do it.
+      - name: Install gitleaks (pinned + checksum-verified)
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" gitleaks
+          ./gitleaks version
+
+      # No .gitleaks.toml on purpose. The default ruleset finds nothing in this
+      # repo's history, and the deliberate fixture tokens in internal/usage (shaped
+      # like credentials so the keychain path is testable) are NOT matched by it.
+      # An allowlist for them would silence nothing today and would mask a real
+      # credential of that shape tomorrow. Add a config only when there is a real
+      # false positive to suppress.
+      - name: Scan full history
+        run: ./gitleaks git --no-banner --redact --verbose

@@ -1,0 +1,32 @@
+# No rule below ends in a slash. A trailing slash matches DIRECTORIES only, and git sees a
+# symlink as a file, so `/queue/` did not ignore a symlink named queue and `git add -A` took
+# it (absolute paths into a home directory were committed that way). Pinned by
+# TestGitignore_NoRuleIsBlindToASymlink.
+# Built binaries
+/bin
+/leadkit
+# Runtime state (lockfile, audit/violation logs, goal/handover, per-project state)
+/.leadkit
+# Dogfood dev-tracking state (see docs/DEV-TRACKING.md): leadkit tracks its own
+# build-tasks on its own in-repo queue/board. This is LOCAL, git-derived, churny
+# overlay state (~105 task files + symlinks) rebuilt from docs/build-tasks/ (the
+# durable source) — NOT shipped toolkit source, so it is never committed.
+/queue
+/tasks
+# OS
+.DS_Store
+# Python eval harness (evals/): virtualenv, bytecode, egg-info, Inspect logs
+/.venv
+__pycache__
+*.egg-info
+/evals/logs
+.pytest_cache
+# The `leadkit team capture` snapshot. This is LOCAL working material, not shipped
+# source: capture versions whatever is live in THIS machine's ~/.claude/agents into
+# <team_dir>, so the committed copy is one operator's operating state at one moment,
+# complete with their project names, ticket numbers and absolute paths. The assets
+# that actually ship are the authored, generic ones embedded from internal/starter/,
+# and `team install` falls back to those when no snapshot is present. Same split as
+# /.leadkit/ above: the durable, generic thing is committed, the captured local state
+# is not.
+/team

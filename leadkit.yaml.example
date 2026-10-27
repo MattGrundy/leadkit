@@ -1,0 +1,102 @@
+# leadkit.yaml.example — an example per-project profile. It is NOT loaded as it stands:
+# leadkit resolves the exact basename `leadkit.yaml`, so this `.example` file is inert.
+# Copy it, then trim it to what you need. Every key is optional; internal/config.Defaults()
+# supplies the rest, and `leadkit config show --show-origin` prints the resolved result.
+# Every field is documented in docs/CONFIG-REFERENCE.md (generated from the schema), and
+# docs/adopter-profiles/per-project-template.leadkit.yaml is a smaller starting point.
+#
+# TWO PLACES THIS FILE CAN LIVE (pick one):
+#
+#   1. In the repo, committed as `leadkit.yaml` at the project root. Found by walking up
+#      from the cwd. Relative paths below anchor to the directory holding the file.
+#
+#   2. Outside the repo, as ~/.claude/leadkit/config/<slug>.yaml, where <slug> is the
+#      repo's origin name (the last path segment of remote.origin.url, minus `.git`).
+#      Used only when no in-repo leadkit.yaml is found, and one file governs every clone
+#      and worktree of the repo. Use this when the repo should not commit its own policy.
+#
+#      ANCHORING TRAP: relative paths in an EXTERNAL config anchor to the CONFIG FILE's
+#      own directory, NOT to the repo. `store_root: ./tasks` there points at
+#      ~/.claude/leadkit/config/tasks, beside the config, and silently orphans the repo's
+#      real store. In an external config, write every path below as an ABSOLUTE path.
+
+# This project's identity: its inbox name and the key its session is addressed by.
+project_id: your-repo
+
+# The queue overlay: <queue_root>/<agent>/<status>/<ticket> symlinks into store_root.
+# Absolute in an external config (see the trap above); `./queue` is fine in-repo.
+queue_root: ./queue
+store_root: ./tasks
+roles_path: ./queue/ROLES
+
+# Where review-gate records are written, shared across projects.
+records_dir: ~/.claude/review-gate/records
+
+# Review-gate scope. Empty means "gate this project's own origin", derived from its git
+# remote. Name a repo (an origin-URL substring) only to gate additional remotes.
+enforced_remotes: []
+
+# Which work-roles are live and how many of each.
+roster:
+  - type: code-review
+    count: 1
+  - type: critique
+    count: 1
+  - type: developer
+    count: 1
+
+# Branches a raw `git push` may reach. Protected branches still need the PR flow.
+push_whitelist: [main, feat/*, fix/*, chore/*, user/*]
+
+# Burn governor: stop starting work when the session budget runs low.
+burn:
+  session_reserve: 10.0
+  op_rate_warn: 400
+  agent_rate_warn: 40
+
+# Local state, conventionally gitignored.
+goal_file: .leadkit/goal.md
+handover_file: .leadkit/handover.md
+milestones_file: .leadkit/milestones.yaml
+push_violations_log: .leadkit/push-violations.jsonl
+
+# AUTHORITY — what a session may do to each repo. This is the part adopters get wrong.
+#
+# The key is matched against the repo's origin URL as a case-sensitive substring, and
+# `leadkit doctor` checks that it matches at a path/host boundary. Key it as
+# `<owner>/<repo>`, so the match starts at a path segment and a fork under another owner
+# does NOT inherit the grant. Match the owner's case exactly: a clone made with a
+# lowercase owner (which `gh repo clone` can produce) will not match a differently cased
+# key, and a missed match fails closed, as a lost grant.
+#
+# Do NOT key it with a leading slash, as `/your-repo.git`. That matches ANY owner's repo
+# of that name on ANY host, so every fork inherits the grant, including `can_merge`.
+authority:
+  your-org/your-repo:
+    can_push: true
+    can_open_pr: true
+    pr_draft_only: false
+    # `human` keeps merges with a person. Grant merge only deliberately, and only to a key
+    # that cannot match a fork.
+    can_merge: human
+    merge_grant: ""          # empty = no standing exception to the human merge
+    required_gates: []       # empty inherits the gate's default layers
+
+# A multi-repo policy, as a comment so it is not live: an infra repo whose agents open
+# PRs unsupervised, and a client repo whose PRs need a human to open and stay draft.
+#
+#   authority:
+#     your-org/infra-repo:
+#       can_push: true
+#       can_open_pr: true
+#       pr_draft_only: false
+#       can_merge: human
+#       required_gates: [code-review, critique]
+#       # REPLACES the top-level push_whitelist entirely, so repeat every pattern wanted.
+#       push_whitelist: [feat/*, fix/*, chore/*, user/*, develop]
+#     your-org/client-repo:
+#       can_push: true
+#       can_open_pr: human     # a human opens it, regardless of gate state
+#       pr_draft_only: true
+#       can_merge: human
+#       required_gates: [code-review, critique]

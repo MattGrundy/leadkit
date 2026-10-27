@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leadkit-eval"
+version = "0.1.0"
+description = "Role-fitness suites for leadkit's agent definitions, run under Inspect."
+requires-python = ">=3.11"
+# Inspect is pinned EXACTLY. A harness that moves under a suite invalidates every comparison made
+# across the move, which is the whole point of recording results. requirements.lock pins the rest.
+dependencies = ["inspect-ai==0.3.276", "pyyaml>=6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["leadkit_eval*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,154 @@
+# Corpus: known-bad comments. Question: "under the comment rule, should a reviewer flag this span?"
+#
+# WHY THIS CORPUS. A change to the reviewer definition (the comment rule, 2cbc38c) is only shown to
+# do anything by running it against known answers. Each case below is a REAL comment from this
+# repo, labelled by what was found by hand, so a reviewer can be scored against it.
+#
+# EVERY CASE IS PINNED. `commit` + `path` + `start_line` identify the exact text, and `text` is that
+# text verbatim. evals/tests/test_corpus.py checks `text` against `git show <commit>:<path>` and fails if a
+# commit is absent or the text has drifted from what the code said.
+#
+# TWO KINDS OF SPAN. `verdict: flag` is text a reviewer applying the rule should flag. `verdict: pass`
+# is text it must NOT flag. The pass spans are not filler: the INT/TERM trap comment and the DEADLINE
+# comment each caught a real P0, so a reviewer that flags them is a regression dressed
+# as tidiness. Text inside a case but outside every span is not scored.
+#
+# EXPECTED VERDICTS WERE RECORDED BEFORE ANY REVIEWER WAS RUN AGAINST THIS FILE. See CRITERIA.md.
+#
+# Spans marked `arguable: true` are judgement calls; missing one is reported but does not fail the
+# run. A false flag on a pass span is never arguable.
+question: "Under the comment rule, should a reviewer flag this span?"
+rubric_version: 1
+rubric_source: "internal/starter/agents/code-review-agent.md @ 2cbc38c (comment rule); critique-agent.md @ 2cbc38c"
+
+cases:
+  - id: main-version-block
+    commit: baffba7
+    path: cmd/leadkit/main.go
+    start_line: 10
+    provenance: "PR #7 (feat/release-binaries). One block holding all three categories at once, kept whole on purpose."
+    text: |2-
+      // Version is leadkit's own version — printed by `leadkit version`/`--version` and
+      // doctor's "binary" check. Bump by hand; docs/build-tasks (kit-lock, audit-*, ...)
+      // have no automatic version bump of their own.
+      // Declared as a VAR, not a const, so a release build can stamp the real tag in with
+      // -ldflags "-X main.Version=...". A const cannot be overridden that way, which meant every
+      // artefact reported whatever was hardcoded here regardless of what was in it — worthless
+      // for a tool whose own doctor checks for binary skew.
+      var Version = "leadkit 0.1.0-dev"
+    spans:
+      - id: stale-bump-by-hand
+        lines: [11, 12]
+        anchor: "Bump by hand"
+        verdict: flag
+        category: stale-claim
+        note: "Says the version is bumped by hand. The SAME PR adds a release build that stamps it with -ldflags, so the claim is false as of this commit."
+      - id: why-var-not-const
+        lines: [13, 14]
+        anchor: "Declared as a VAR"
+        verdict: pass
+        category: why
+        note: "One-sentence why naming the mechanism that breaks if changed to a const (-ldflags -X cannot override one). Must survive. It ends on line 14."
+      - id: history-tail
+        lines: [15, 16]
+        anchor: "artefact reported"
+        verdict: flag
+        category: history
+        note: "Past-tense account of what the old const did ('which meant every artefact reported ...'). Belongs in the commit message. The sentence begins at the end of line 14; the span is the whole lines 15-16 so it does not overlap the why span."
+  - id: install-checksum-narrative
+    commit: bdfda19
+    path: install.sh
+    start_line: 69
+    provenance: "PR #7 (feat/release-binaries), fix commit bdfda19. NOT in baffba7: that commit has no such block."
+    text: |2-
+      # Extract the line FIRST and require it, rather than piping grep into the checker. This is
+      # /bin/sh with no pipefail, so a pipeline's status is the LAST command's: grep finding nothing was
+      # invisible. macOS ships a /sbin/sha256sum that exits 0 on empty input, and `command -v sha256sum`
+      # finds it, so a SHA256SUMS carrying no line for this archive printed "checksum ok" and installed
+      # an unverified binary. `shasum` exits 1 on empty input, which is why the hole only opened on this
+      # project's own platform.
+      line=$(grep " $archive\$" "$tmp/SHA256SUMS") \
+        || die "SHA256SUMS has no entry for $archive — refusing to install unverified"
+      [ -n "$line" ] || die "SHA256SUMS entry for $archive is empty — refusing to install unverified"
+    spans:
+      - id: history-checksum-bug
+        lines: [69, 74]
+        anchor: "Extract the line FIRST"
+        verdict: flag
+        category: history
+        arguable: true
+        note: "Six lines, mostly a past-tense narrative of a fixed bug ('printed \"checksum ok\" and installed an unverified binary'). Marked arguable: the first sentence ('extract the line first, no pipefail in /bin/sh') is a durable why. A reviewer that flags the narrative and keeps that sentence is right; one that flags nothing is wrong."
+  - id: install-trap-why
+    commit: bdfda19
+    path: install.sh
+    start_line: 54
+    provenance: "PR #7 (feat/release-binaries), fix commit bdfda19. NOT in baffba7, which has a single-line trap with no comment."
+    text: |2-
+      # INT and TERM must EXIT, not merely clean up: a trap handler that returns lets the script
+      # carry on running after the signal. exit fires the EXIT trap, so cleanup runs once there.
+      trap cleanup EXIT
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+    spans:
+      - id: why-trap-exits
+        lines: [54, 55]
+        anchor: "INT and TERM must EXIT"
+        verdict: pass
+        category: why
+        note: "Two-line why naming what breaks: a handler that returns lets the script carry on after the signal. Caught a real P0. Must NOT be flagged."
+  - id: hookprobe-deadline
+    commit: 9ed95fe
+    path: internal/doctor/hookprobe.go
+    start_line: 138
+    provenance: "PR #5 (feat/doctor-hook-probe), as merged to main."
+    text: |2-
+      	if err := cmd.Run(); err != nil {
+      		// Check the DEADLINE FIRST. CommandContext kills the child on timeout, and
+      		// cmd.Run then returns an *exec.ExitError with a non-nil ProcessState — the same
+      		// shape as an honest non-zero exit. Testing for ExitError before ctx.Err() makes
+      		// a hung binary report healthy and leaves the timeout branch unreachable, which
+      		// is the opposite of what the comment on hookProbeTimeout promises.
+      		if ctx.Err() != nil {
+      			return fmt.Errorf("did not respond within %s", hookProbeTimeout)
+      		}
+    spans:
+      - id: why-deadline-first
+        lines: [139, 143]
+        anchor: "Check the DEADLINE FIRST"
+        verdict: pass
+        category: why
+        note: "Five-line why naming what breaks if the order is swapped: a hung binary reports healthy and the timeout branch becomes unreachable. Caught a real P0. Must NOT be flagged."
+  - id: agnostic-ext-restates-name
+    commit: 3b58038
+    path: cmd/leadkit/agnostic_docs_test.go
+    start_line: 46
+    provenance: "This repo's history, 3b58038 (PR #2 review fixes). Removed later."
+    text: |2-
+      // agnosticDocExtensions are the prose file types the ratchet scans.
+      var agnosticDocExtensions = []string{".md", ".yaml", ".yml"}
+    spans:
+      - id: restates-identifier
+        lines: [46, 46]
+        anchor: "agnosticDocExtensions are"
+        verdict: flag
+        category: restates-identifier
+        note: "Restates its own identifier: the name already says these are the doc extensions, and the slice literal below it shows which."
+  - id: hardcoded-count
+    commit: 3b58038
+    path: cmd/leadkit/agnostic_docs_test.go
+    start_line: 5
+    provenance: "This repo's history, 3b58038 (PR #2 review fixes). Removed in d3d7a30 for exactly this reason."
+    text: |2-
+      // TestSource_IsProjectAgnostic covers shipping Go. Prose was never covered, which made the
+      // scrub reversible: a doc could be genericised in one pass and regress in the next with
+      // nothing failing. This file closes that by scanning *.md / *.yaml / *.yml for the same
+      // denylist, behind a RATCHET rather than a clean-tree assertion — 73 files are still dirty
+      // (workstream 6 in docs/BACKLOG.md), so demanding a clean tree today would just be a
+      // permanently red test.
+    spans:
+      - id: hardcoded-73
+        lines: [8, 8]
+        anchor: "73 files are still dirty"
+        verdict: flag
+        category: hardcoded-count
+        note: "A count in a comment that nothing checks and that is wrong from the next scrub onwards. The rest of the sentence, which gives the reason a clean-tree assertion is not used, is not scored."
