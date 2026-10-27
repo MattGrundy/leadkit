@@ -371,10 +371,18 @@ func TestStarterAgents_ReviewersCannotBeNudgedByMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"code-review-agent.md", "critique-agent.md"} {
+	// A NAMED floor, not a derived one: these are the three roles whose output is an
+	// artefact on disk rather than a conversation, so a count or a "read-only roles"
+	// rule would let one be swapped out unnoticed. finalise belongs here for the same
+	// reason as the two reviewers and a sharper one — it is the role that ships gated
+	// work, so a nudge to it is a nudge to publish.
+	for _, name := range []string{"code-review-agent.md", "critique-agent.md", "finalise.md"} {
+		if len(agents[name]) == 0 {
+			t.Fatalf("%s is missing from the starter set; this check cannot have run against it", name)
+		}
 		for _, tool := range toolList(t, agents[name]) {
 			if tool == "SendMessage" {
-				t.Errorf("%s holds SendMessage; a reviewer must report by recorded verdict only", name)
+				t.Errorf("%s holds SendMessage; it must report by recorded verdict and ticket note only", name)
 			}
 		}
 	}

@@ -115,6 +115,70 @@ exact basename `leadkit.yaml` is loaded.
 This repository uses the external mode and ships no committed profile, because its authority
 config names its owner and carries a merge grant, which should not be in git.
 
+## The roles
+
+Sixteen role definitions ship inside the binary and install into a project with
+`leadkit team install --apply --confirm`. They are in
+[`internal/starter/agents/`](internal/starter/agents) and they are meant to be read and
+adapted rather than installed and forgotten — they carry more operating experience than
+anything else here.
+
+What separates the roles is the **tool grant**, not the wording of the brief:
+
+| Role | Tools | What that buys |
+| --- | --- | --- |
+| `lead` | `Agent Read Edit Write Grep Glob Bash SendMessage` | Decomposes, spawns, supervises |
+| `developer` | `Read Edit Write Grep Glob Bash SendMessage` | Builds one task inside its own paths; cannot spawn |
+| `code-review-agent` | `Read Grep Glob Bash` | Line-by-line correctness. Cannot edit, and cannot be messaged |
+| `critique-agent` | `Read Grep Glob Bash` | Reads the diff against its stated goal. The terminal gate layer |
+| `finalise` | `Read Grep Glob Bash` | Ships gated work. Never edits, never reviews, never merges |
+| `orchestrator` | `Read Grep Glob Bash SendMessage` | Keeps the queue moving so the lead is not the thing being pinged |
+| `overarching-lead` | `Agent Read Grep Glob Bash SendMessage` | Coordinates project leads. Cannot edit anything |
+
+Two of those are worth dwelling on. **Reviewers hold no `SendMessage`**, so a reviewer
+cannot be nudged and cannot explain itself in chat: the recorded verdict and the ticket
+note are the report. And **`overarching-lead` has no `Edit` or `Write`**, so the
+lead-of-leads physically cannot implement — whereas `lead` does hold them, which means
+"the lead decomposes and does not implement" is a rule in its brief at that level rather
+than a boundary the tooling enforces. The honest version is that only the outer
+coordinator is actually prevented.
+
+The remaining nine are domain specialists (`architecture-agent`, `devops-agent`,
+`dx-agent`, `frontend-agent`, `qa-agent`), three narrow workers with the model pinned
+(`bulk-edit-agent`, `recon-agent`, `test-runner`), and `sync-executor` for pushing a
+computed plan into an external tracker.
+
+[`internal/starter/team-protocol.md`](internal/starter/team-protocol.md) is the protocol
+every owner reads alongside its own definition, and it is the closest thing here to an
+operating manual: the queue is the substrate, one consumer one name, waiting is free but
+a timeout is not an ending, reporting is not a reason to end, behind main is the normal
+state, done means verified.
+
+### Changing them
+
+The starters are a starting point, and the one thing worth knowing before you edit is that
+**`team install` is create-only**: it writes what is missing and keeps what you already
+have, so an adapted definition survives every later install. Overwriting is opt-in via
+`--replace-existing`, which copies each original to a `.bak-<timestamp>` first.
+
+```
+leadkit team install --apply --confirm   # create-only; your edits are safe
+# edit the definitions in team.agents_dir (default ~/.claude/agents)
+leadkit team capture                     # versions them into the in-repo team dir, so the change is in git
+leadkit team validate                    # compares the live team against a reference
+leadkit team status                      # what is installed, and what differs
+```
+
+Which roles are live, and how many of each, comes from `roster` and the `ROLES` file at
+`roles_path` rather than from the presence of a definition file — so retiring a role is a
+profile change, not a deletion.
+
+Two flags exist because of specific failures. `--replace-existing` keeps a backup because
+a definition is operating experience and overwriting one silently loses it. And
+`--starters` reinstalls the clean embedded set, *ignoring* a captured snapshot, for when a
+snapshot has picked up another project's specifics — which is the failure mode of any
+default that was really somebody else's configuration.
+
 ## The guards
 
 Each is a `PreToolUse` hook that inspects the real command and returns allow or deny.

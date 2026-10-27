@@ -50,8 +50,10 @@ c. **push-guard + PR guard, via `authority.<repo>`** — whitelist-only push (a 
 d. **The chained gate: code-review → critique, with layer independence** — code-review and
    critique must each pass before the next layer can even be recorded, and the two must come from
    DIFFERENT reviewers (never the same agent identity recording both). This is enforced in
-   `internal/gate`, not just convention — see item 4 of `docs/build-tasks/queue-mode-enforcement.md`
-   for why a "one agent does both" shortcut is refused outright.
+   `internal/gate`, not just convention: a recorder may replace its own verdict but never a peer's, so
+   one agent recording both layers is refused outright rather than warned about. Two reviewers holding
+   one identity are one reviewer, and the 2/2 they produce is the most convincing evidence you will get
+   for something nobody independently checked.
 
 ## What to skip
 
