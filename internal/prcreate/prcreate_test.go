@@ -342,7 +342,7 @@ func TestResolveAuthority_SubstringMatch(t *testing.T) {
 func TestResolveAuthority_LongestKeyWinsDeterministic(t *testing.T) {
 	origin := "git@github.com:acmecorp/shared-infra.git"
 	prof := &config.Profile{Authority: map[string]config.AuthoritySpec{
-		"infra":                {MergeGrant: "short"},
+		"infra":                 {MergeGrant: "short"},
 		"acmecorp/shared-infra": {MergeGrant: "specific"},
 	}}
 	for i := 0; i < 100; i++ {

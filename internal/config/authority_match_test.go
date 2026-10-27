@@ -13,7 +13,7 @@ import (
 func TestMatchAuthorityKey_LongestWinsDeterministic(t *testing.T) {
 	origin := "git@github.com:acmecorp/shared-infra.git"
 	auth := map[string]AuthoritySpec{
-		"infra":                {PushWhitelist: []string{"chore/*"}},
+		"infra":                 {PushWhitelist: []string{"chore/*"}},
 		"acmecorp/shared-infra": {PushWhitelist: []string{"feat/*", "mg/*"}},
 	}
 	for i := 0; i < 200; i++ {
@@ -65,7 +65,7 @@ func TestMatchAuthorityKey_SingleAndNoMatch(t *testing.T) {
 func TestMatchAuthorityKey_RequirePushWhitelistFilter(t *testing.T) {
 	origin := "git@github.com:acmecorp/shared-infra.git"
 	auth := map[string]AuthoritySpec{
-		"infra":                {PushWhitelist: []string{"chore/*"}},
+		"infra":                 {PushWhitelist: []string{"chore/*"}},
 		"acmecorp/shared-infra": {CanPush: true}, // longer, but NO push_whitelist
 	}
 	// Unfiltered: the longer key wins.
@@ -83,10 +83,10 @@ func TestMatchAuthorityKey_RequirePushWhitelistFilter(t *testing.T) {
 func TestMatchingAuthorityKeys_SortedLongestFirst(t *testing.T) {
 	origin := "git@github.com:acmecorp/shared-infra.git"
 	auth := map[string]AuthoritySpec{
-		"infra":                {},
+		"infra":                 {},
 		"acmecorp/shared-infra": {},
-		"acmecorp":             {},
-		"unrelated":            {},
+		"acmecorp":              {},
+		"unrelated":             {},
 	}
 	got := MatchingAuthorityKeys(origin, auth)
 	want := []string{"acmecorp/shared-infra", "acmecorp", "infra"}
@@ -105,7 +105,7 @@ func TestAuthorityKeyBoundaryAligned(t *testing.T) {
 	}{
 		{"git@github.com:acmecorp/platform-infra.git", "platform-infra", true},          // /...(.)
 		{"git@github.com:acmecorp/platform-infra.git", "acmecorp/platform-infra", true}, // /...(.)
-		{"git@github.com:acmecorp/shared-infra.git", "infra", false},                     // mid-word
+		{"git@github.com:acmecorp/shared-infra.git", "infra", false},                    // mid-word
 		{"git@github.com:acmecorp/shared-infra.git", "shared-infra", true},
 		{"git@github.com:acmecorp/widgets", "widgets", true}, // end-of-string
 		{"host/aaa-bbb", "aaa", false},                       // followed by '-'
